@@ -42,12 +42,10 @@ class Three_View_Images__Membrane_Edition():
 	def _update_view_i_qimage(self, view):
 		
 		sem_nparray = annotate_interface.three_slices_data[view].sem_img
-		boundary_opacity_nparray = _get_boundary_opacity_nparray(annotate_interface.get_bdr_img_of_view_i(view), # (h, w), bool
+		boundary_opacity_nparray = _get_boundary_opacity_nparray(annotate_interface.get_membrane_mask_of_view_i(view), # (h, w), bool
 																 self._assemble_datum_mask_for_view_i(view)) # [h * w * 3]
 		
-		bdr_nparray = annotate_interface.get_bdr_img_of_view_i(view) # (h, w), bool
-		bdr_nparray = np.dstack((bdr_nparray, bdr_nparray, bdr_nparray)) * painting_parameters.common_cell_boundary_opacity
-		image_to_draw = (sem_nparray * (1-bdr_nparray)).astype('uint8') # boundary is (0,0,0)
+		image_to_draw = (sem_nparray * (1-boundary_opacity_nparray)).astype('uint8') # boundary is (0,0,0)
 		
 		if view == 0:
 			image_to_draw = image_to_draw.transpose((1,0,2))

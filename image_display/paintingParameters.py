@@ -7,7 +7,7 @@ class Painting_Parameters(object):
     special_cell_boundary_opacity = 1.0
     common_cell_boundary_opacity = 0.5
     draw_stroke = 3
-    membrane_erase_stroke_width = 1
+    membrane_edition_stroke_width = 1
 
 
 # singleton

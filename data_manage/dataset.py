@@ -63,10 +63,10 @@ class Sem_And_Label_Data(object):
 
 		self._label_cube_data = labels_raw
 		
-		self._get_bdr_cube_data()
+		# self._get_bdr_cube_data()
 
 
-	def _get_bdr_cube_data(self):
+	def _get_membrane_cube_data(self):
 		self._bdr_cube_data = np.zeros(self._cube_shape, dtype='bool')
 		for i in range(self._cube_shape[0]):
 			bdr_slice = mask_and_boundary_related.get_all_cell_boundary(utils.label_to_rgb_ndarray(self._label_cube_data[i, :, :]))
@@ -80,6 +80,9 @@ class Sem_And_Label_Data(object):
 
 	def _get_label_slice(self, view, depth):
 		return threed_to_twod.get_slice_from_cube(self._label_cube_data, view, depth)
+
+	def _set_label_slice(self, slc, view, depth):
+		self._label_cube_data = threed_to_twod.set_slice_to_cube(self._label_cube_data, slc, view, depth)
 
 	def _get_sem_slice(self, view, depth):
 		return threed_to_twod.get_slice_from_cube(self._sem_cube_data, view, depth)

@@ -22,7 +22,7 @@ class Mode_Control(QWidget):
         self.cb = QComboBox()
         self.cb.addItems(self.modes)
         self.cb.currentIndexChanged.connect(self.value_changed_func)
-        self.cb.setCurrentIndex(4)
+        self.cb.setCurrentIndex(0)
 
         grid = QGridLayout()
         grid.addWidget(self.label,1,0)

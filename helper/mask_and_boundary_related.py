@@ -3,7 +3,6 @@ import numpy as np
 
 import threed_to_twod
 
-# dtype should be uint8
 def get_all_cell_boundary(crt_label_image):
     grad = np.gradient(crt_label_image)
     if len(crt_label_image.shape) == 3:

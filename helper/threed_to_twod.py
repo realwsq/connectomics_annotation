@@ -17,6 +17,18 @@ def get_slice_from_cube(cube, view, depth):
 		return cube[:, :, depth]
 
 '''
+set slice to cube from view #view at depth #depth
+'''
+def set_slice_to_cube(cube, slc, view, depth):
+	if view == 0:
+		cube[depth, :, :] = slc
+	elif view == 1:
+		cube[:, depth, :] = slc
+	elif view == 2:
+		cube[:, :, depth] = slc
+	return cube
+
+'''
 input: [min_h,max_h,min_w,max_w,min_z,max_z], cube
 '''
 def get_cube_surface(vtx, cube):

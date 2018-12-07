@@ -35,21 +35,24 @@ class File_Dialog(QWidget):
         
     def get_sem_file(self):
         fname = QFileDialog.getOpenFileName(self, 'Open file', 
-           '/media/data_cifs/shuqi/')
+           # '/media/data_cifs/shuqi/'
+           )
         self.sem_file = fname
         self.sem_btn.setEnabled(False)
 
     def get_lab_file(self):
         fname = QFileDialog.getOpenFileName(self, 'Open file', 
-           '/media/data_cifs/shuqi/')
+           # '/media/data_cifs/shuqi/'
+           )
         self.lab_file = fname
         self.lab_btn.setEnabled(False)
         
     def get_output_folder(self):
         print "in get output folder"
         foldername = QFileDialog.getExistingDirectory(self, 'choose a folder',
-            '/media/data_cifs/shuqi/')
-        self.output_folder = None
+            # '/media/data_cifs/shuqi/'
+            )
+        self.output_folder = foldername
         self.of_btn.setEnabled(False)
 
     # def done_func(self):

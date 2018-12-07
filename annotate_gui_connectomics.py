@@ -16,6 +16,7 @@ from data_manage.sliceInteractionInterface import annotate_interface
 
 import sys
 import os
+import time
 import numpy as np
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
@@ -27,7 +28,7 @@ import numpy as np
 class GUI_Control():
     def __init__(self):
         self.selection_modes = ["merge (global)", "split (global)", "edit one ID (slice)", "edit all IDs (slice)", "membrane edition", ]
-        self.current_selection_mode = 4
+        self.current_selection_mode = 0
 
 GUI_control = GUI_Control()
 
@@ -66,13 +67,14 @@ class Image_Label(QGraphicsView):
         self.setFrameShape(QFrame.NoFrame)
 
         self._pan = False
+        self._editing = False
         self._pan_start_x = 0
         self._pan_start_y = 0
     
     def hasPhoto(self):
         return not self._empty
 
-    def _getXAndY_from_screen_input(self, point):
+    def _getXAndY_from_screen_input(self, point, correct=False):
         point = self.mapToScene(point[0], point[1])
         point = [int(round(point.x())), int(round(point.y()))]
         # point should be (x, y)
@@ -83,7 +85,18 @@ class Image_Label(QGraphicsView):
             x = point[0]
             y = point[1]
 
-        return x, y 
+        h, w = annotate_interface.get_slice_shape(self.this_view)
+
+        if correct:
+            y = utils.confine_value(y, (0, h-1))
+            x = utils.confine_value(x, (0, w-1))
+        else:
+            if y < 0 or y >= h:
+                return x, y, False
+            if x < 0 or x >= w:
+                return x, y, False
+
+        return x, y, True 
 
     def wheelEvent(self, event):
         modifiers = QApplication.keyboardModifiers()
@@ -109,7 +122,12 @@ class Image_Label(QGraphicsView):
     def mousePressEvent(self,event):
 
         modifiers = QApplication.keyboardModifiers()
-        mouse_x, mouse_y = self._getXAndY_from_screen_input([event.x(), event.y()])
+        mouse_x, mouse_y, xy_valid = self._getXAndY_from_screen_input([event.x(), event.y()])
+        print mouse_x, mouse_y, xy_valid
+
+        if not xy_valid:
+            event.ignore()
+            return
 
         if event.button() == Qt.MidButton and bool(modifiers == Qt.NoModifier):
             # pan
@@ -133,28 +151,57 @@ class Image_Label(QGraphicsView):
                     utils.label_to_rgb(annotate_interface.get_selected_cell_label()))
                 self.main_window_control.update_images_in_image_label()
             elif GUI_control.current_selection_mode == 4: # membrane_edition
+                self._editing = True
                 # add membrane
-                annotate_interface.add_node_on_bdr_cube_data_of_view_i(
+                annotate_interface.add_node_on_membrane_cube_data_of_view_i(
                     mouse_x, mouse_y, 
+                    self.this_view,
+                    painting_parameters.membrane_edition_stroke_width)
+                self.main_window_control.update_images_in_image_label()
+            elif GUI_control.current_selection_mode == 2: # edit one ID (slice)
+                annotate_interface.select_host_cell_for_global_merge(
+                    mouse_x, mouse_y,
                     self.this_view)
+                self.main_window_control.control_window.set_background_color(
+                    utils.label_to_rgb(annotate_interface.get_selected_cell_label()))
                 self.main_window_control.update_images_in_image_label()
             event.accept()
             return
         elif event.button() == Qt.LeftButton and bool(modifiers == Qt.ControlModifier):
             if GUI_control.current_selection_mode == 4: # membrane_edition
+                self._editing = True
                 # erase membrane
-                annotate_interface.erase_node_on_bdr_cube_data_of_view_i(
+                annotate_interface.erase_node_on_membrane_cube_data_of_view_i(
                     mouse_x, mouse_y, 
                     self.this_view,
-                    painting_parameters.membrane_erase_stroke_width)
+                    painting_parameters.membrane_edition_stroke_width)
+                self.main_window_control.update_images_in_image_label()
+            elif GUI_control.current_selection_mode == 2 or GUI_control.current_selection_mode == 3:
+                annotate_interface.fuse_selected_region_with_this_cell(
+                    mouse_x, mouse_y,
+                    self.this_view)
                 self.main_window_control.update_images_in_image_label()
             event.accept()
             return
         elif event.button() == Qt.RightButton and bool(modifiers == Qt.NoModifier):
             if GUI_control.current_selection_mode == 0: # merge all
+                if not annotate_interface.has_selected_cell():
+                    return
                 annotate_interface.fuse_this_cell_with_host_cell(
                     mouse_x, mouse_y, 
                     self.this_view)
+                self.main_window_control.update_images_in_image_label()
+            elif GUI_control.current_selection_mode == 2: # edit one ID (slice)
+                if not annotate_interface.has_selected_cell():
+                    return 
+                self._editing = True
+                annotate_interface.init_drawing_slice(self.this_view)
+                annotate_interface.add_node_in_draw_points(mouse_x, mouse_y)
+                self.main_window_control.update_images_in_image_label()
+            elif GUI_control.current_selection_mode == 3: # edit all ID (slice)
+                self._editing = True
+                annotate_interface.init_drawing_slice(self.this_view)
+                annotate_interface.add_node_in_draw_points(mouse_x, mouse_y)
                 self.main_window_control.update_images_in_image_label()
             event.accept()
             return
@@ -163,7 +210,11 @@ class Image_Label(QGraphicsView):
 
     def mouseReleaseEvent(self,event):
         modifiers = QApplication.keyboardModifiers()
-        mouse_x, mouse_y = self._getXAndY_from_screen_input([event.x(), event.y()])
+        mouse_x, mouse_y, xy_valid = self._getXAndY_from_screen_input([event.x(), event.y()], True)
+
+        if not xy_valid:
+            event.ignore()
+            return
 
         if event.button() == Qt.MidButton and bool(modifiers == Qt.NoModifier):
             # pan
@@ -172,13 +223,28 @@ class Image_Label(QGraphicsView):
             # self.setCursor(Qt.ArrowCursor)
             event.accept()
             return
+        elif self._editing:
+            self._editing = False
+            if (GUI_control.current_selection_mode == 4 and (bool(modifiers == Qt.NoModifier) or bool(modifiers == Qt.ControlModifier))):
+                pass
+            elif (GUI_control.current_selection_mode == 2 and (bool(modifiers == Qt.NoModifier))) or (GUI_control.current_selection_mode == 3 and (bool(modifiers == Qt.NoModifier))):
+                annotate_interface.finish_drawing_slice()
+                self.main_window_control.update_images_in_image_label()
+            
+            event.accept()
+            return
+
 
         event.ignore()
 
     def mouseMoveEvent(self,event):
         modifiers = QApplication.keyboardModifiers()
-        mouse_x, mouse_y = self._getXAndY_from_screen_input([event.x(), event.y()])
+        mouse_x, mouse_y, xy_valid = self._getXAndY_from_screen_input([event.x(), event.y()], True)
         
+        if not xy_valid:
+            event.ignore()
+            return
+            
         if self._pan:
             # pan
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - 7 * (event.x() - self._pan_start_x));
@@ -188,26 +254,29 @@ class Image_Label(QGraphicsView):
             event.accept();
             return
             
-        if event.buttons() & Qt.LeftButton and bool(modifiers == Qt.NoModifier):
+        if self._editing:
             if GUI_control.current_selection_mode == 4: # membrane_edition
-                # add membrane
-                annotate_interface.add_node_on_bdr_cube_data_of_view_i(
-                    mouse_x, mouse_y, 
-                    self.this_view)
-                self.main_window_control.update_images_in_image_label()
-            event.accept();
-            return
-        elif event.buttons() & Qt.LeftButton and bool(modifiers == Qt.ControlModifier):
-            if GUI_control.current_selection_mode == 4: # membrane_edition
-                # erase membrane
-                annotate_interface.erase_node_on_bdr_cube_data_of_view_i(
-                    mouse_x, mouse_y, 
-                    self.this_view,
-                    painting_parameters.membrane_erase_stroke_width)
+                if bool(modifiers == Qt.NoModifier):
+                    # add membrane
+                    annotate_interface.add_node_on_membrane_cube_data_of_view_i(
+                        mouse_x, mouse_y, 
+                        self.this_view,
+                        painting_parameters.membrane_edition_stroke_width)
+                    self.main_window_control.update_images_in_image_label()
+                elif bool(modifiers == Qt.ControlModifier):
+                    # erase membrane
+                    annotate_interface.erase_node_on_membrane_cube_data_of_view_i(
+                        mouse_x, mouse_y, 
+                        self.this_view,
+                        painting_parameters.membrane_edition_stroke_width)
+                    self.main_window_control.update_images_in_image_label()
+            elif GUI_control.current_selection_mode == 2 or GUI_control.current_selection_mode == 3:
+                annotate_interface.add_node_in_draw_points(mouse_x, mouse_y)
                 self.main_window_control.update_images_in_image_label()
             else:
+                assert False
 
-            event.accept()
+            event.accept();
             return
 
         event.ignore()            
@@ -267,18 +336,24 @@ class Control_Window(QWidget):
     def _selection_mode_changed(self, selection_mode):
         print "selection mode changed to " + str(selection_mode)
         GUI_control.current_selection_mode = selection_mode
+        annotate_interface.clear_user_added()
+        self.set_foreground_color(
+                    [255,255,255])
+        self.set_background_color(
+                    [255,255,255])
+                
         if selection_mode == 4: # membrane_edition
-            annotate_interface.init_bdr_cube_data()
+            annotate_interface.init_membrane_cube_data()
         self.main_window_control.update_images_in_image_label()
 
     def _fg_thres_changed(self, fg_thres):
-        print "selection mode changed to " + str(fg_thres)
+        print "fg thres changed to " + str(fg_thres)
 
     def _fg_erode_itr_changed(self, fg_erode_itr):
-        print "selection mode changed to " + str(fg_erode_itr)
+        print "fg erode itr changed to " + str(fg_erode_itr)
 
     def _erase_stroke_changed(self, stroke_width):
-        painting_parameters.membrane_erase_stroke_width = stroke_width
+        painting_parameters.membrane_edition_stroke_width = stroke_width
         
     def set_foreground_color(self, rgb):
         self.label_color_control.set_foreground_color(QColor(rgb[0], rgb[1], rgb[2]))
@@ -318,7 +393,7 @@ class Control_Window(QWidget):
             0, 10, 4, 
             self._fg_erode_itr_changed)
         self.erase_stroke_control = label_slider.Label_Slider(
-            'erasing stroke width', 
+            'stroke width', 
             0, 5, 1, 
             self._erase_stroke_changed)
 
@@ -373,7 +448,12 @@ class Main_Window(QWidget):
             print 'ctrl+c pressed'
             annotate_interface.clear_small_fragments(1000)
             self.update_images_in_image_label()
-
+        elif (bool(modifiers == Qt.NoModifier)) and (event.key() == Qt.Key_Q):
+            print 'q pressed'
+            painting_parameters.special_cell_boundary_visible = not painting_parameters.special_cell_boundary_visible
+        elif (bool(modifiers == Qt.NoModifier)) and (event.key() == Qt.Key_W):
+            print 'w pressed'
+            painting_parameters.common_cell_boundary_visible = not painting_parameters.common_cell_boundary_visible
 
     def update_images_in_image_label(self):
         update_image_manager()
@@ -430,9 +510,9 @@ def main(*argv): # sem, lab, output_folder
         #     continue
 
         app.exec_()
-        sem = fd.sem_file
-        lab = fd.lab_file
-        output_folder = fd.output_folder
+        sem = str(fd.sem_file)
+        lab = str(fd.lab_file)
+        output_folder = str(fd.output_folder)
         print "get all needed folder"
 
     elif len(argv) == 3:
@@ -446,7 +526,7 @@ def main(*argv): # sem, lab, output_folder
         sem_raw_data_file = str(sem)
         sem_raw_data = np.load(sem_raw_data_file)#['volume'].astype('uint8')#[:,:192,:]
     else:
-        sem_raw_data_file_gipl = str(cub)
+        sem_raw_data_file_gipl = str(sem)
         sem_raw_data_file = os.path.join(output_folder, 'cub.npy')
 
         # convert from gipl to npy
@@ -480,11 +560,12 @@ def main(*argv): # sem, lab, output_folder
     # .reshape((768,384,384))
 
         
-    annotate_interface.init(sem_raw_data, label_raw_data)
 
-    app = QApplication(sys.argv)
+    app_main = QApplication(sys.argv)
     QApplication.setOverrideCursor(Qt.ArrowCursor)
+
+    annotate_interface.init(sem_raw_data, label_raw_data)
     # painter = QPainter()
     main_window = Main_Window(output_folder)
 
-    sys.exit(app.exec_())
+    sys.exit(app_main.exec_())

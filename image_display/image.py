@@ -39,15 +39,15 @@ class Three_View_Images():
 
 	def _assemble_special_bdr_mask_for_view_i(self, view):
 		slice_data = annotate_interface.three_slices_data[view]
-		selected_region_boundary = annotate_interface.get_selected_region_boundary_of_view_i_for_vis(view)
 		
 		h, w = annotate_interface.get_slice_shape(view)
 		bdr_mask = np.zeros((h,w), dtype="bool")
 
-		if type(selected_region_boundary) is np.ndarray:
-			bdr_mask = bdr_mask | selected_region_boundary
-		if type(slice_data.one_slice_of_selected_cell_boundary) is np.ndarray:
-			bdr_mask = bdr_mask | slice_data.one_slice_of_selected_cell_boundary
+		if type(slice_data.stroke_mask) is np.ndarray:
+			bdr_mask = bdr_mask | slice_data.stroke_mask
+		if type(slice_data.one_slice_of_selected_cell_boundary_mask) is np.ndarray:
+			bdr_mask = bdr_mask | slice_data.one_slice_of_selected_cell_boundary_mask
+
 
 		return bdr_mask
 
@@ -65,7 +65,7 @@ class Three_View_Images():
 		slice_data = annotate_interface.three_slices_data[view]
 
 		cube_and_label_nparray = _get_cube_and_label_nparray(slice_data.sem_img, slice_data.label_img) # [h * w * 3]
-		boundary_opacity_nparray = _get_boundary_opacity_nparray(slice_data.all_cells_bdr_img,  
+		boundary_opacity_nparray = _get_boundary_opacity_nparray(slice_data.all_cells_bdr_mask,  
 																 self._assemble_special_bdr_mask_for_view_i(view),
 																 self._assemble_datum_mask_for_view_i(view)) # [h * w * 3]
 		image_to_draw = (cube_and_label_nparray * (1-boundary_opacity_nparray)).astype('uint8') # boundary is (0,0,0)
